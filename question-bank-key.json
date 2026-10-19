@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "keyId": "sha256:2e131fe13b7011bbb9a7be5c2e330ae22d7ef9f0ef4be8ef7faf2f707c66fc9b",
+  "jwk": {
+    "key_ops": [
+      "wrapKey"
+    ],
+    "ext": true,
+    "alg": "RSA-OAEP-256",
+    "kty": "RSA",
+    "n": "pa41meC8h9z0FhuqKkdV9QhM_yBOLOed1bzWoHB-2ZNl_Si85B70ly-MBjS7prhEsZvhftcxq-MJodfuaVT9KNdhHfw5zdkhEieU5x6VLhOsJKgTxKMvY7zRyyK58C9IY-wn4vWVNo-EpFDFOoj9qI8sAHI1Exr_zSOZdENKmv2BNsxNgPoioAQYSGHSLDHDRA8GEcg9kuboKmAKhOZOjgBrociGcZ93wjBHP2r2ZEhwTGMwQd6D1BQMvS1vX9wA0oYsYJ7OubBylQVNniDBQjqPqiLxYObjGltY3Y8HPt-OAl0SYVfIT0zkqvH0Q8tcK1Y-NKuiA-nUrOSeQf4hxBg_IpBV2vNB6bwxX4KYdFP7l39y6TUodXUQ4Ci4NHvnhhnlGJeaWLklqsYzO7OPZaQXl2ZbuLj5YTg0S7SqgHLfohgLSl8h1T8PSwn7Gd-jgz-4P6pcc1cBY4RjkqnAsFQa0KB_vLM4zYCb-wnHrxBalDxdjx1xhHwQOld-fpft",
+    "e": "AQAB"
+  }
+}
