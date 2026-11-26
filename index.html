@@ -91,7 +91,12 @@ form{border-top:1px solid var(--line);padding-top:23px}label{display:block;font-
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(), 15000);
   try {
-    const response = await fetch(url, { signal: controller.signal, cache: 'force-cache', credentials: 'omit' });
+    const options = { signal: controller.signal, credentials: 'omit' };
+    let response = await fetch(url, { ...options, cache: 'force-cache' }).catch(error => {
+      if (controller.signal.aborted) throw error;
+      return null;
+    });
+    if (!response?.ok) response = await fetch(url, { ...options, cache: 'reload' });
     if (!response.ok) throw new Error('Protected reader file could not be loaded');
     const text = await response.text();
     if (text.length > 4 * 1024 * 1024) throw new Error('Protected reader file is too large');
@@ -173,6 +178,8 @@ const dialog = document.getElementById('unlock-dialog');
     toggle.textContent = '보기';
     toggle.setAttribute('aria-pressed', 'false');
     let plaintextBytes;
+    let checkingPassword = false;
+    let workbookNotice = '';
     try {
       const legacySource = await loadProtectedText('protected-legacy-b7c19dd5.html');
       const legacyMatch = legacySource.match(/<script\b[^>]*id="encrypted-payload"[^>]*>([^<]+)<\/script>/);
@@ -183,9 +190,14 @@ const dialog = document.getElementById('unlock-dialog');
       const key = await crypto.subtle.deriveKey({
         name: 'PBKDF2', hash: 'SHA-256', iterations: payload.iterations, salt: decode(payload.salt),
       }, material, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+      checkingPassword = true;
       plaintextBytes = new Uint8Array(await crypto.subtle.decrypt({
         name: 'AES-GCM', iv: decode(payload.iv), tagLength: 128,
       }, key, decode(payload.ciphertext)));
+      checkingPassword = false;
+      if (typeof DecompressionStream !== 'function') {
+        throw new Error('Protected reader decompression is unavailable');
+      }
       let html = new TextDecoder('utf-8', { fatal: true }).decode(plaintextBytes);
       plaintextBytes.fill(0);
       const decryptEditionHtml = (async function decryptEditionHtml(legacyHtml,update,subtle=globalThis.crypto.subtle){
@@ -228,13 +240,20 @@ const dialog = document.getElementById('unlock-dialog');
       plaintextBytes.fill(0);
       if (thisAttempt !== attempt || !dialog.open) return;
       const names = JSON.parse(document.getElementById('workbook-parts').textContent);
-      const parts = await Promise.all(names.map(async name => {
+      const results = await Promise.allSettled(names.map(async name => {
         if(!/^editions\/workbook-\d+-\d+-[a-f0-9]{16}\.json$/.test(name)) throw Error('Invalid workbook path');
         const item=JSON.parse(await loadProtectedText(name));
         return JSON.parse(await decryptEditionHtml(html,item));
       }));
       if(thisAttempt !== attempt || !dialog.open) return;
-      html=(function applyWorkbookParts(html, parts) {
+      const firstFailure = results.findIndex(result => result.status === 'rejected');
+      const ready = firstFailure < 0 ? results : results.slice(0, firstFailure);
+      const parts = ready.map(result => result.value);
+      if (firstFailure >= 0) {
+        workbookNotice = '워크북 추가 자료를 일부 불러오지 못했습니다. 지금은 불러온 범위까지 볼 수 있습니다. 전체 범위를 보려면 새로고침한 뒤 다시 열어 주세요.';
+      }
+      try {
+        if (parts.length) html=(function applyWorkbookParts(html, parts) {
   const tag = '<script type="application/json" id="corp-workbook-data">';
   const start = html.indexOf(tag);
   if (start < 0 || html.indexOf(tag,start+1) >= 0) throw Error('Workbook data missing');
@@ -278,16 +297,32 @@ const dialog = document.getElementById('unlock-dialog');
   html=once(html,refAnchor,"  Object.assign(sourceLinks,extra.refs);\n"+refAnchor);
   return once(html,'PDF 13~56쪽 · 소챕터 9개 · 한국어 해설','PDF 13~'+pages.at(-1).page+'쪽 · 소챕터 '+(9+groups.size)+'개 · 한국어 해설');
 })(html,parts);
+      } catch {
+        workbookNotice = '워크북 추가 자료를 적용하지 못했습니다. 기본 판본은 열 수 있습니다.';
+      }
       // Replace the document at this URL: existing hash routes and origin storage keep working.
       // Only the authenticated, publisher-authored standalone HTML reaches document.write.
       window.history.replaceState(null, '', selectedDestination);
       document.open();
       document.write(html);
       document.close();
-    } catch {
+      if (workbookNotice && document.body) {
+        const notice = document.createElement('p');
+        notice.setAttribute('role', 'status');
+        notice.style.cssText = 'margin:0;padding:12px 20px;background:#fff2cf;color:#473410;font-size:1rem';
+        notice.textContent = workbookNotice;
+        document.body.prepend(notice);
+      }
+    } catch (error) {
       if (thisAttempt !== attempt || !dialog.open) return;
       status.classList.add('error');
-      status.textContent = '책을 열 수 없습니다. 비밀번호를 확인하고 다시 시도해 주세요.';
+      if (checkingPassword && error.name === 'OperationError') {
+        status.textContent = '비밀번호를 확인하고 다시 입력해 주세요.';
+      } else if (typeof DecompressionStream !== 'function') {
+        status.textContent = '이 브라우저에서는 교재 파일을 열 수 없습니다. 최신 Chrome, Edge 또는 Safari에서 다시 열어 주세요.';
+      } else {
+        status.textContent = '교재 파일을 불러오지 못했습니다. 새로고침한 뒤 다시 열어 주세요.';
+      }
       submit.disabled = false;
       input.disabled = false;
       toggle.disabled = false;
